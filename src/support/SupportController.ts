@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import { JiraService } from '../services/JiraService';
 import { LlmService } from '../services/LlmService';
+import { NewmanService } from '../services/NewmanService';
 import { ClassifierEngine } from '../core/ClassifierEngine';
 import { UrlBuilder } from '../core/UrlBuilder';
 import { CommentBuilder } from '../core/CommentBuilder';
@@ -21,6 +22,7 @@ export class SupportController {
     private context: vscode.ExtensionContext,
     private jiraService: JiraService,
     private llmService: LlmService,
+    private newmanService: NewmanService,
     private classifier: ClassifierEngine,
     private urlBuilder: UrlBuilder,
     private commentBuilder: CommentBuilder,
@@ -159,6 +161,8 @@ export class SupportController {
       analysis: null,
       grafanaUrl: null,
       kibanaUrl: null,
+      newmanSummary: null,
+      newmanResults: [],
       conclusion: 'UNCLASSIFIED',
       commentedAt: null,
     };
@@ -187,6 +191,7 @@ export class SupportController {
       const genericAnalysis = await this.llmService.analyzeTicketGeneric(ticket);
       result.analysis = genericAnalysis;
       result.conclusion = 'UNCLASSIFIED';
+      await this.runNewmanIfIncident(ticket, result);
     } else {
       this.log(`[TICKET] Buscando coincidencia de clasificador Markdown para ${ticket.key}`);
       const threshold = this.config.scoreThreshold * 100;
@@ -211,6 +216,7 @@ export class SupportController {
         );
         result.analysis = analysis;
         this.log(`[TICKET] Análisis LLM completado para ${ticket.key} - Confianza: ${analysis.confidence}`);
+        await this.runNewmanIfIncident(ticket, result);
 
         if (analysis.missingFields && analysis.missingFields.length > 0) {
           this.log(`[TICKET] ${ticket.key} falta campos: ${analysis.missingFields.join(', ')}`);
@@ -225,6 +231,7 @@ export class SupportController {
           await this.llmService.analyzeTicketGeneric(ticket);
         result.analysis = genericAnalysis;
         result.conclusion = 'UNCLASSIFIED';
+        await this.runNewmanIfIncident(ticket, result);
       }
     }
 
@@ -263,7 +270,6 @@ export class SupportController {
     try {
       this.log(`[COMMENT] Generando comentario para ${ticket.key}`);
       const comment = this.commentBuilder.buildComment(result);
-      this.log(`[COMMENT] Contenido generado para ${ticket.key}:\n${this.previewText(comment, 3000)}`);
       this.log(`[COMMENT] Enviando comentario a ${ticket.key} (${comment.length} caracteres)`);
       await this.jiraService.postComment(ticket.key, comment);
       this.log(`[COMMENT] ✓ Comentario enviado exitosamente a ${ticket.key}`);
@@ -275,7 +281,7 @@ export class SupportController {
 
   private async extractRequestIdForMonitoring(ticket: JiraTicket): Promise<string | null> {
     this.log(`[REQUEST-ID] Iniciando búsqueda con LLM para ${ticket.key}`);
-    this.log(`[REQUEST-ID] Descripción enviada a extractor (${ticket.key}):\n${this.previewText(this.descriptionToString(ticket.description))}`);
+    this.log(`[REQUEST-ID] Descripción normalizada para ${ticket.key}: ${this.descriptionToString(ticket.description).length} caracteres`);
     const requestId = await this.llmService.extractRequestId(ticket);
 
     if (requestId) {
@@ -317,6 +323,24 @@ export class SupportController {
     } else {
       this.log(`[MONITORING] No se generó URL Kibana para ${ticket.key}. Revisa template y request id.`);
     }
+  }
+
+  private async runNewmanIfIncident(
+    ticket: JiraTicket,
+    result: TicketResult
+  ): Promise<void> {
+    if (!result.analysis?.isIncident) {
+      this.log(`[NEWMAN] ${ticket.key} no fue marcado como incidente por el LLM. No se ejecuta Newman.`);
+      return;
+    }
+
+    this.log(`[NEWMAN] ${ticket.key} fue marcado como incidente por el LLM. Ejecutando colecciones Postman.`);
+    result.newmanResults = await this.newmanService.runConfiguredCollections();
+    result.newmanSummary = await this.llmService.summarizeNewmanResults(
+      ticket,
+      result.newmanResults
+    );
+    this.log(`[NEWMAN] Resumen LLM para ${ticket.key}:\n${result.newmanSummary}`);
   }
 
   private markCommented(ticketKey: string, result: TicketResult): void {

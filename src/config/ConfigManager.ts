@@ -27,6 +27,10 @@ export class ConfigManager {
       scoreThreshold: config.get('scoreThreshold') || 0.5,
       promptsDirectory: config.get('promptsDirectory') || '',
       promptsDocumentation: config.get('promptsDocumentation') || '',
+      postmanCollectionPaths: config.get('postmanCollectionPaths') || [],
+      postmanEnvironmentPaths: config.get('postmanEnvironmentPaths') || [],
+      newmanCommand: config.get('newmanCommand') || 'newman',
+      newmanTimeoutMs: config.get('newmanTimeoutMs') || 120000,
     };
   }
 

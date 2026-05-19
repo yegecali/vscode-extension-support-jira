@@ -3,6 +3,7 @@ import { ConfigManager } from './config/ConfigManager';
 import { SecretManager } from './services/SecretManager';
 import { JiraService } from './services/JiraService';
 import { LlmService } from './services/LlmService';
+import { NewmanService } from './services/NewmanService';
 import { ClassifierEngine } from './core/ClassifierEngine';
 import { UrlBuilder } from './core/UrlBuilder';
 import { CommentBuilder } from './core/CommentBuilder';
@@ -53,6 +54,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     jiraService = new JiraService(config, apiToken, logger);
     const llmService = new LlmService(logger);
+    const newmanService = new NewmanService(config, logger);
     const classifier = new ClassifierEngine();
     const urlBuilder = new UrlBuilder();
     const commentBuilder = new CommentBuilder();
@@ -69,6 +71,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       context,
       jiraService,
       llmService,
+      newmanService,
       classifier,
       urlBuilder,
       commentBuilder,

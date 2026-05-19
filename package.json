@@ -126,6 +126,32 @@
           "type": "string",
           "default": "",
           "description": "(Nuevo) Ruta a un archivo de documentación del proyecto. El contenido será incluido en el contexto del LLM para análisis más precisos. Ejemplo: /Users/me/project-docs.md"
+        },
+        "jiraClassifier.postmanCollectionPaths": {
+          "type": "array",
+          "default": [],
+          "description": "Rutas a archivos o directorios con colecciones Postman .json. Si es directorio, se buscan .json recursivamente.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "jiraClassifier.postmanEnvironmentPaths": {
+          "type": "array",
+          "default": [],
+          "description": "Rutas a archivos o directorios con environments/variables Postman .json. Si es directorio, se buscan .json recursivamente.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "jiraClassifier.newmanCommand": {
+          "type": "string",
+          "default": "newman",
+          "description": "Comando o ruta absoluta del ejecutable de Newman."
+        },
+        "jiraClassifier.newmanTimeoutMs": {
+          "type": "number",
+          "default": 120000,
+          "description": "Timeout por ejecución de Newman en milisegundos."
         }
       }
     }

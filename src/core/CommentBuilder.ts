@@ -48,6 +48,7 @@ export class CommentBuilder {
       '- Proporciona los campos faltantes\n' +
       '- Re-actualiza el ticket para que se ejecute el análisis nuevamente\n\n' +
       this.buildMonitoringSection(result) +
+      this.buildNewmanSection(result) +
       '_Confianza del análisis: ' +
       `${Math.round(analysis.confidence * 100)}%_`
     );
@@ -67,6 +68,7 @@ export class CommentBuilder {
       '📋 Próximos pasos:\n' +
       `${nextStepsText}\n\n` +
       this.buildMonitoringSection(result) +
+      this.buildNewmanSection(result) +
       `_Actualizado: ${new Date().toISOString()}_`
     );
   }
@@ -86,6 +88,7 @@ export class CommentBuilder {
       'El sistema no pudo determinar la categoría de este ticket.\n' +
       'Por favor, revísalo manualmente y proporciona más contexto si es necesario.\n\n' +
       this.buildMonitoringSection(result) +
+      this.buildNewmanSection(result) +
       `_Ticket: ${result.ticket.key}_`
     );
   }
@@ -109,5 +112,43 @@ export class CommentBuilder {
       urls.join('\n') +
       '\n\n'
     );
+  }
+
+  private buildNewmanSection(result: TicketResult): string {
+    if (!result.newmanSummary && result.newmanResults.length === 0) {
+      return '';
+    }
+
+    return (
+      '🧪 Resultado Newman/Postman:\n' +
+      this.buildNewmanTable(result) +
+      (result.newmanSummary ? `Resumen: ${result.newmanSummary}\n\n` : '\n')
+    );
+  }
+
+  private buildNewmanTable(result: TicketResult): string {
+    if (result.newmanResults.length === 0) {
+      return '';
+    }
+
+    const rows = [
+      '| Collection | Environment | Estado | Exit code |',
+      '| --- | --- | --- | --- |',
+      ...result.newmanResults.map(newmanResult => {
+        const status = newmanResult.exitCode === 0 ? 'OK' : 'FALLÓ';
+        return [
+          this.fileName(newmanResult.collection),
+          newmanResult.environment ? this.fileName(newmanResult.environment) : 'Sin environment',
+          status,
+          newmanResult.exitCode === null ? 'unknown' : String(newmanResult.exitCode),
+        ].join(' | ');
+      }).map(row => `| ${row} |`),
+    ];
+
+    return `${rows.join('\n')}\n\n`;
+  }
+
+  private fileName(filePath: string): string {
+    return filePath.split(/[\\/]/).pop() || filePath;
   }
 }

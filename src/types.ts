@@ -34,6 +34,17 @@ export interface LlmAnalysis {
   summary: string;
   nextSteps: string[];
   confidence: number;
+  isIncident: boolean;
+}
+
+export interface NewmanRunResult {
+  collection: string;
+  environment: string | null;
+  command: string;
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+  error: string | null;
 }
 
 export interface TicketResult {
@@ -42,6 +53,8 @@ export interface TicketResult {
   analysis: LlmAnalysis | null;
   grafanaUrl: string | null;
   kibanaUrl: string | null;
+  newmanSummary: string | null;
+  newmanResults: NewmanRunResult[];
   conclusion: 'COMPLETE' | 'MISSING_DATA' | 'EMPTY' | 'CLOSED' | 'UNCLASSIFIED';
   commentedAt: string | null;
 }
@@ -57,4 +70,8 @@ export interface ExtensionConfig {
   scoreThreshold: number;
   promptsDirectory: string;
   promptsDocumentation: string;
+  postmanCollectionPaths: string[];
+  postmanEnvironmentPaths: string[];
+  newmanCommand: string;
+  newmanTimeoutMs: number;
 }

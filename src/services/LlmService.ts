@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { JiraTicket, LlmAnalysis, MarkdownPrompt, LlmScore } from '../types';
+import { JiraTicket, LlmAnalysis, MarkdownPrompt, LlmScore, NewmanRunResult } from '../types';
 
 export class LlmService {
   constructor(private logger?: (message: string) => void) {}
@@ -143,7 +143,11 @@ export class LlmService {
         `Título: ${ticket.summary}\n` +
         `Descripción:\n${this.descriptionToString(ticket.description) || 'No proporcionada'}`;
 
-      this.logRequestIdExtractionStep(ticket.key, 'Descripción normalizada', this.descriptionToString(ticket.description) || 'No proporcionada');
+      this.logRequestIdExtractionStep(
+        ticket.key,
+        'Descripción normalizada',
+        `${this.descriptionToString(ticket.description).length} caracteres`
+      );
 
       const text = await this.sendLoggedRequest(
         model,
@@ -169,6 +173,45 @@ export class LlmService {
       const message = error instanceof Error ? error.message : 'Unknown error';
       this.logger?.(`[LLM REQUEST][extractRequestId] Error extrayendo request id: ${message}`);
       return null;
+    }
+  }
+
+  async summarizeNewmanResults(
+    ticket: JiraTicket,
+    results: NewmanRunResult[]
+  ): Promise<string> {
+    try {
+      if (results.length === 0) {
+        return 'No se ejecutaron colecciones Newman: no hay colecciones configuradas o no se encontraron archivos.';
+      }
+
+      const model = await this.selectModel();
+      if (!model) {
+        return this.buildFallbackNewmanSummary(results);
+      }
+
+      const systemPrompt =
+        'Eres un especialista QA/SRE. Resume resultados de Newman para un incidente. ' +
+        'Indica si las colecciones pasaron o fallaron, errores principales, endpoints o tests afectados si aparecen, y próximos pasos. ' +
+        'Sé breve y accionable.';
+
+      const userMessage =
+        `Ticket: ${ticket.key}\n` +
+        `Título: ${ticket.summary}\n\n` +
+        `Resultados Newman:\n${this.formatNewmanResultsForLlm(results)}`;
+
+      const text = await this.sendLoggedRequest(
+        model,
+        'summarizeNewmanResults',
+        systemPrompt,
+        userMessage
+      );
+
+      return text?.trim() || this.buildFallbackNewmanSummary(results);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger?.(`[NEWMAN] Error resumiendo resultados con LLM: ${message}`);
+      return this.buildFallbackNewmanSummary(results);
     }
   }
 
@@ -214,7 +257,8 @@ export class LlmService {
       `  "missingFields": ["field1", "field2"],\n` +
       `  "summary": "string breve",\n` +
       `  "nextSteps": ["step1", "step2"],\n` +
-      `  "confidence": número entre 0 y 100\n` +
+      `  "confidence": número entre 0 y 100,\n` +
+      `  "isIncident": boolean\n` +
       `}`
     );
   }
@@ -253,11 +297,7 @@ export class LlmService {
       vscode.LanguageModelChatMessage.User(userMessage),
     ];
 
-    this.logLlmMessage(operation, 'REQUEST', [
-      `Model: ${model.name} (${model.id})`,
-      `[Assistant prompt]\n${systemPrompt}`,
-      `[User message]\n${userMessage}`,
-    ].join('\n\n'));
+    this.logLlmMessage(operation, 'REQUEST', `Model: ${model.name} (${model.id})`);
 
     const response = await Promise.race([
       model.sendRequest(
@@ -278,7 +318,7 @@ export class LlmService {
       text += chunk;
     }
 
-    this.logLlmMessage(operation, 'RESPONSE', text || '(empty response)');
+    this.logLlmMessage(operation, 'RESPONSE', `Respuesta recibida (${text.length} caracteres)`);
     return text;
   }
 
@@ -298,16 +338,12 @@ export class LlmService {
     const rawLength = documentation?.length ?? 0;
     const trimmedLength = documentation?.trim().length ?? 0;
     const willSend = trimmedLength > 0;
-    const preview = willSend
-      ? this.previewText(documentation ?? '')
-      : '(no se adjunta documentación: undefined, vacío o solo espacios)';
 
     this.logLlmMessage(operation, 'REQUEST', [
       '[Documentation check]',
       `rawLength: ${rawLength}`,
       `trimmedLength: ${trimmedLength}`,
       `willSendContext: ${willSend}`,
-      `[Documentation preview]\n${preview}`,
     ].join('\n'));
   }
 
@@ -325,6 +361,31 @@ export class LlmService {
     return text.length > maxLength
       ? `${text.slice(0, maxLength)}... [truncado]`
       : text;
+  }
+
+  private formatNewmanResultsForLlm(results: NewmanRunResult[]): string {
+    return results
+      .map((result, index) => (
+        `# Ejecución ${index + 1}\n` +
+        `Comando: ${result.command}\n` +
+        `Collection: ${result.collection}\n` +
+        `Environment: ${result.environment || 'sin environment'}\n` +
+        `Exit code: ${result.exitCode ?? 'unknown'}\n` +
+        `Error: ${result.error || 'none'}\n` +
+        `STDOUT:\n${this.previewText(result.stdout, 6000)}\n` +
+        `STDERR:\n${this.previewText(result.stderr, 3000)}`
+      ))
+      .join('\n\n');
+  }
+
+  private buildFallbackNewmanSummary(results: NewmanRunResult[]): string {
+    const failed = results.filter(result => result.exitCode !== 0).length;
+    const passed = results.length - failed;
+
+    return (
+      `Newman ejecutó ${results.length} corrida(s): ` +
+      `${passed} exitosa(s), ${failed} fallida(s).`
+    );
   }
 
   private parseScore(text: string): LlmScore {
@@ -370,6 +431,9 @@ export class LlmService {
         confidence: typeof parsed.confidence === 'number'
           ? Math.max(0, Math.min(100, parsed.confidence)) / 100
           : 0.5,
+        isIncident: typeof parsed.isIncident === 'boolean'
+          ? parsed.isIncident
+          : this.inferIncident(parsed.classification, parsed.summary),
       };
     } catch {
       return this.defaultAnalysis(fallbackClassification);
@@ -406,7 +470,13 @@ export class LlmService {
       summary: 'No se pudo analizar automáticamente',
       nextSteps: ['Requiere revisión manual'],
       confidence: 0,
+      isIncident: this.inferIncident(classification),
     };
+  }
+
+  private inferIncident(classification?: unknown, summary?: unknown): boolean {
+    const text = `${typeof classification === 'string' ? classification : ''} ${typeof summary === 'string' ? summary : ''}`.toLowerCase();
+    return text.includes('incident') || text.includes('incidente');
   }
 
   private timeout(ms: number): Promise<null> {

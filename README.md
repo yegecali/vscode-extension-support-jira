@@ -120,6 +120,12 @@ Configura estos valores desde `Settings` buscando `Jira Classifier`:
 | `jiraClassifier.pollingIntervalMinutes` | Intervalo de polling en minutos. |
 | `jiraClassifier.scoreThreshold` | Umbral de score (0-1). El LLM califica relevancia 0-100; internamente se multiplica por 100. Por defecto: 0.7 (equivale a 70/100). |
 | `jiraClassifier.promptsDirectory` | Ruta al directorio con archivos `.md` de diagnóstico. Ej: `/Users/me/jira-prompts`. |
+| `jiraClassifier.postmanCollectionPaths` | Lista de archivos o directorios con colecciones Postman `.json`. Los directorios se recorren recursivamente. |
+| `jiraClassifier.postmanEnvironmentPaths` | Lista de archivos o directorios con variables/environments Postman `.json`. Los directorios se recorren recursivamente. |
+| `jiraClassifier.newmanCommand` | Comando o ruta absoluta del ejecutable de Newman. Por defecto: `newman`. |
+| `jiraClassifier.newmanTimeoutMs` | Timeout por ejecución de Newman en milisegundos. |
+
+Cuando el LLM marca el ticket como incidente (`isIncident: true`), la extensión ejecuta Newman para cada colección encontrada. Si hay environments configurados, ejecuta cada colección con cada environment. El stdout/stderr de Newman se envía al LLM para generar un resumen que se agrega al comentario de Jira.
 
 La primera vez que se active la extensión, VS Code pedirá el API token de Jira y lo guardará como secreto local de la extensión.
 

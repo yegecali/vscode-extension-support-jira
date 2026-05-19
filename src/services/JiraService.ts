@@ -151,12 +151,21 @@ export class JiraService {
     const lines = text.split('\n');
     const content: object[] = [];
 
-    for (const line of lines) {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
       if (line.trim() === '') {
         continue;
       }
 
-      if (line.startsWith('# ')) {
+      if (this.isTableStart(lines, i)) {
+        const tableLines: string[] = [];
+        while (i < lines.length && this.isTableLine(lines[i])) {
+          tableLines.push(lines[i]);
+          i++;
+        }
+        i--;
+        content.push(this.tableToAdf(tableLines));
+      } else if (line.startsWith('# ')) {
         content.push({
           type: 'heading',
           attrs: { level: 1 },
@@ -196,6 +205,52 @@ export class JiraService {
       version: 1,
       content,
     };
+  }
+
+  private isTableStart(lines: string[], index: number): boolean {
+    return (
+      this.isTableLine(lines[index]) &&
+      index + 1 < lines.length &&
+      /^\|\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(lines[index + 1].trim())
+    );
+  }
+
+  private isTableLine(line: string): boolean {
+    return line.trim().startsWith('|') && line.trim().endsWith('|');
+  }
+
+  private tableToAdf(lines: string[]): object {
+    const dataRows = lines.filter((_, index) => index !== 1);
+
+    return {
+      type: 'table',
+      attrs: {
+        isNumberColumnEnabled: false,
+        layout: 'default',
+      },
+      content: dataRows.map(line => ({
+        type: 'tableRow',
+        content: this.parseTableCells(line).map(cell => ({
+          type: 'tableCell',
+          attrs: {},
+          content: [
+            {
+              type: 'paragraph',
+              content: this.parseInlineContent(cell),
+            },
+          ],
+        })),
+      })),
+    };
+  }
+
+  private parseTableCells(line: string): string[] {
+    return line
+      .trim()
+      .replace(/^\|/, '')
+      .replace(/\|$/, '')
+      .split('|')
+      .map(cell => cell.trim());
   }
 
   private parseInlineContent(text: string): object[] {

@@ -1,0 +1,27 @@
+{
+  "info": {
+    "_postman_id": "75895bc6-2459-49c2-85c1-6befb6c7cb9f",
+    "name": "Json Placeholder",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "36181999"
+  },
+  "item": [
+    {
+      "name": "Get Posts",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{domain}}/posts",
+          "host": [
+            "{{domain}}"
+          ],
+          "path": [
+            "posts"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}

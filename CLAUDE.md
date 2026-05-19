@@ -156,6 +156,10 @@ All settings are in `package.json` under `contributes.configuration.properties`.
 | `jiraClassifier.kibanaUrlTemplate` | string | Full Kibana URL template. `{request-id-changed}` is replaced with the extracted request id |
 | `jiraClassifier.pollingIntervalMinutes` | number | Polling frequency |
 | `jiraClassifier.promptsDocumentation` | string | Optional: Path to project documentation file to include in LLM context |
+| `jiraClassifier.postmanCollectionPaths` | string[] | Files/directories with Postman collection JSON files. Directories are scanned recursively |
+| `jiraClassifier.postmanEnvironmentPaths` | string[] | Files/directories with Postman environment JSON files. Directories are scanned recursively |
+| `jiraClassifier.newmanCommand` | string | Newman executable command or absolute path |
+| `jiraClassifier.newmanTimeoutMs` | number | Timeout per Newman execution |
 
 ConfigManager validates that required settings are filled. Missing values will trigger warnings on activation.
 
