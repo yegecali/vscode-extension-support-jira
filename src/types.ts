@@ -11,23 +11,10 @@ export interface JiraTicket {
   url: string;
 }
 
-export interface ClassifierPrompt {
-  id: string;
-  label: string;
-  classification: string;
-  keywords: string[];
-  requiredFields: string[];
-  grafanaDashboard: string;
-  kibanaDashboard: string;
-  promptTemplate: string;
-}
-
 export interface MarkdownFrontmatter {
   id: string;
   label: string;
   classification: string;
-  grafanaDashboard: string;
-  kibanaDashboard: string;
 }
 
 export interface MarkdownPrompt {
@@ -51,7 +38,6 @@ export interface LlmAnalysis {
 
 export interface TicketResult {
   ticket: JiraTicket;
-  matchedPrompt: ClassifierPrompt | null;
   matchedMarkdownPrompt: MarkdownPrompt | null;
   analysis: LlmAnalysis | null;
   grafanaUrl: string | null;
@@ -65,11 +51,10 @@ export interface ExtensionConfig {
   jiraEmail: string;
   jiraProject: string;
   jiraJql: string;
-  grafanaBaseUrl: string;
-  kibanaBaseUrl: string;
+  grafanaUrlTemplate: string;
+  kibanaUrlTemplate: string;
   pollingIntervalMinutes: number;
   scoreThreshold: number;
-  classifierPrompts: ClassifierPrompt[];
   promptsDirectory: string;
   promptsDocumentation: string;
 }

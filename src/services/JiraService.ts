@@ -160,13 +160,13 @@ export class JiraService {
         content.push({
           type: 'heading',
           attrs: { level: 1 },
-          content: [{ type: 'text', text: line.substring(2) }],
+          content: this.parseInlineContent(line.substring(2)),
         });
       } else if (line.startsWith('## ')) {
         content.push({
           type: 'heading',
           attrs: { level: 2 },
-          content: [{ type: 'text', text: line.substring(3) }],
+          content: this.parseInlineContent(line.substring(3)),
         });
       } else if (line.startsWith('- ')) {
         content.push({
@@ -177,7 +177,7 @@ export class JiraService {
               content: [
                 {
                   type: 'paragraph',
-                  content: [{ type: 'text', text: line.substring(2) }],
+                  content: this.parseInlineContent(line.substring(2)),
                 },
               ],
             },
@@ -186,7 +186,7 @@ export class JiraService {
       } else {
         content.push({
           type: 'paragraph',
-          content: [{ type: 'text', text: line }],
+          content: this.parseInlineContent(line),
         });
       }
     }
@@ -196,6 +196,46 @@ export class JiraService {
       version: 1,
       content,
     };
+  }
+
+  private parseInlineContent(text: string): object[] {
+    const content: object[] = [];
+    const linkPattern = /\[([^\]]+)\]\(<([^>]+)>\)/g;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = linkPattern.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        content.push({
+          type: 'text',
+          text: text.slice(lastIndex, match.index),
+        });
+      }
+
+      content.push({
+        type: 'text',
+        text: match[1],
+        marks: [
+          {
+            type: 'link',
+            attrs: {
+              href: match[2],
+            },
+          },
+        ],
+      });
+
+      lastIndex = linkPattern.lastIndex;
+    }
+
+    if (lastIndex < text.length) {
+      content.push({
+        type: 'text',
+        text: text.slice(lastIndex),
+      });
+    }
+
+    return content.length > 0 ? content : [{ type: 'text', text }];
   }
 
   private async makeRequest<T>(

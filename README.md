@@ -6,26 +6,14 @@ Extensión de VS Code para asistir flujos de soporte con tickets de Jira. La ext
 
 - Panel lateral de tickets dentro de VS Code.
 - Polling configurable contra Jira.
-- **Doble modo de clasificación:**
-  - Modo Legacy: Clasificación por keywords y plantillas JSON configurables.
-  - Modo Markdown + LLM: Carpeta de diagnósticos markdown con scoring paralelo vía GitHub Copilot.
+- Clasificación con prompts Markdown y scoring paralelo vía GitHub Copilot.
 - Generación de URLs de monitoreo para Grafana y Kibana.
 - Almacenamiento seguro del token de Jira usando `context.secrets` de VS Code.
 - Comandos para iniciar, detener, refrescar, abrir configuración y limpiar cache.
 
 ## Flujos de Clasificación
 
-### Flujo Legacy (JSON Keywords)
-
-Cuando `promptsDirectory` está vacío:
-1. Sistema lee la descripción del ticket desde Jira.
-2. Compara la descripción contra keywords en `classifierPrompts` (JSON).
-3. Selecciona el prompt que coincida con más keywords.
-4. Usa el prompt para consultar al LLM (contexto: descripción del ticket).
-5. LLM retorna análisis con clasificación y campos faltantes.
-6. Genera comentario y URLs de Grafana/Kibana según la clasificación.
-
-### Flujo Markdown + LLM Scoring (Nuevo)
+### Flujo Markdown + LLM Scoring
 
 Cuando `promptsDirectory` está configurado (ej: `/Users/me/jira-prompts`):
 1. Sistema carga todos los archivos `.md` del directorio (con frontmatter YAML).
@@ -45,7 +33,8 @@ Cuando `promptsDirectory` está configurado (ej: `/Users/me/jira-prompts`):
    - LLM retorna análisis con clasificación, campos faltantes y recomendaciones.
 6. **Generación de Comentario:**
    - Crea comentario en Jira con análisis, clasificación y URLs de monitoreo.
-   - URLs provienen del frontmatter del `.md` ganador (Grafana y Kibana).
+   - URLs provienen de `grafanaUrlTemplate` y `kibanaUrlTemplate`.
+   - El request id se extrae con LLM y reemplaza `{request-id-changed}` en las plantillas.
 
 **Ejemplo de salida en logs:**
 ```
@@ -68,8 +57,6 @@ Cada `.md` debe incluir frontmatter YAML y cuerpo con contexto diagnóstico:
 id: login-authentication-failure
 label: Fallo de Autenticación / Login
 classification: AUTHENTICATION_ERROR
-grafanaDashboard: /d/auth-dashboard
-kibanaDashboard: /app/discover#/?_a=(query:(match_phrase:(event:login_failed)))
 ---
 
 ## Diagnóstico de Fallo de Login
@@ -128,12 +115,11 @@ Configura estos valores desde `Settings` buscando `Jira Classifier`:
 | `jiraClassifier.jiraEmail` | Email de la cuenta Jira. |
 | `jiraClassifier.jiraProject` | Clave del proyecto Jira. |
 | `jiraClassifier.jiraJql` | Consulta JQL usada para obtener tickets. |
-| `jiraClassifier.grafanaBaseUrl` | URL base de Grafana. |
-| `jiraClassifier.kibanaBaseUrl` | URL base de Kibana. |
+| `jiraClassifier.grafanaUrlTemplate` | Plantilla completa de Grafana. Usa `{request-id-changed}` donde debe ir el request id. |
+| `jiraClassifier.kibanaUrlTemplate` | Plantilla completa de Kibana. Usa `{request-id-changed}` donde debe ir el request id. |
 | `jiraClassifier.pollingIntervalMinutes` | Intervalo de polling en minutos. |
 | `jiraClassifier.scoreThreshold` | Umbral de score (0-1). El LLM califica relevancia 0-100; internamente se multiplica por 100. Por defecto: 0.7 (equivale a 70/100). |
-| `jiraClassifier.promptsDirectory` | **(Nuevo) Ruta al directorio con archivos `.md` de diagnóstico.** Si está configurado, reemplaza `classifierPrompts`. Ej: `/Users/me/jira-prompts`. Consulta la sección "Flujos de Clasificación" para detalles. |
-| `jiraClassifier.classifierPrompts` | **(Legacy) Solo se usa cuando `promptsDirectory` está vacío.** Lista de clasificadores, keywords, campos requeridos y prompts en formato JSON. |
+| `jiraClassifier.promptsDirectory` | Ruta al directorio con archivos `.md` de diagnóstico. Ej: `/Users/me/jira-prompts`. |
 
 La primera vez que se active la extensión, VS Code pedirá el API token de Jira y lo guardará como secreto local de la extensión.
 
@@ -181,7 +167,7 @@ La carpeta `examples/` contiene 3 archivos `.md` de ejemplo que demuestran el fo
 - `api-timeout-performance.md` — Diagnóstico para timeouts y problemas de latencia en APIs.
 
 Puedes usar estos como plantilla para crear tus propios diagnósticos. Cada archivo contiene:
-- **Frontmatter YAML:** id, label, classification, grafanaDashboard, kibanaDashboard.
+- **Frontmatter YAML:** id, label, classification.
 - **Cuerpo:** Contexto y pasos de diagnóstico que ayudan al LLM a evaluar relevancia y generar análisis.
 
 Para usar estos ejemplos:

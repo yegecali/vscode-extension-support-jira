@@ -97,15 +97,15 @@
           "default": "project = BANK AND status != Closed AND updated >= -7d ORDER BY updated DESC",
           "description": "JQL para filtrar tickets"
         },
-        "jiraClassifier.grafanaBaseUrl": {
+        "jiraClassifier.grafanaUrlTemplate": {
           "type": "string",
           "default": "",
-          "description": "URL base de Grafana"
+          "description": "Plantilla completa de URL de Grafana. Usa {request-id-changed} donde debe reemplazarse el request id detectado."
         },
-        "jiraClassifier.kibanaBaseUrl": {
+        "jiraClassifier.kibanaUrlTemplate": {
           "type": "string",
           "default": "",
-          "description": "URL base de Kibana"
+          "description": "Plantilla completa de URL de Kibana. Usa {request-id-changed} donde debe reemplazarse el request id detectado."
         },
         "jiraClassifier.pollingIntervalMinutes": {
           "type": "number",
@@ -115,115 +115,12 @@
         "jiraClassifier.scoreThreshold": {
           "type": "number",
           "default": 0.7,
-          "description": "Umbral de score (0.0 - 1.0). En modo Legacy: relevancia de keywords. En modo Markdown+LLM: se multiplica por 100 (ej: 0.7 = 70/100 LLM score). Consulta README.md > Flujos de Clasificación"
-        },
-        "jiraClassifier.classifierPrompts": {
-          "type": "array",
-          "default": [
-            {
-              "id": "auth-error",
-              "label": "Error autenticación tarjeta",
-              "classification": "AUTH_ERROR",
-              "keywords": [
-                "autenticacion",
-                "tarjeta",
-                "pin",
-                "token",
-                "rechazo",
-                "fallida"
-              ],
-              "requiredFields": [
-                "request_id",
-                "card_last4",
-                "timestamp"
-              ],
-              "grafanaDashboard": "/d/auth-errors",
-              "kibanaDashboard": "/app/discover#/?_a=(query:(match_phrase:(type:authentication)))",
-              "promptTemplate": "Eres un agente de soporte bancario especializado en errores de autenticación. Analiza el ticket y determina:\n1. Clasificación: ¿es un error de PIN? ¿Token expirado? ¿Datos insuficientes?\n2. Campos faltantes: request_id, card_last4, timestamp\n3. Próximos pasos: verificar logs, contactar customer, escalar a seguridad\nSé conciso y directo."
-            },
-            {
-              "id": "delayed-transfer",
-              "label": "Transferencia demorada",
-              "classification": "DELAYED_TRANSFER",
-              "keywords": [
-                "transferencia",
-                "demora",
-                "no llego",
-                "pendiente",
-                "stuck",
-                "retraso"
-              ],
-              "requiredFields": [
-                "transaction_id",
-                "source_account",
-                "amount"
-              ],
-              "grafanaDashboard": "/d/transfers",
-              "kibanaDashboard": "/app/discover#/?_a=(query:(match_phrase:(type:transfer)))",
-              "promptTemplate": "Eres un especialista en procesamiento de transferencias. Analiza el ticket:\n1. Clasificación: ¿es una transferencia interna o internacional? ¿Tiempo esperado vs actual?\n2. Campos necesarios: transaction_id, source_account, amount, destination_account\n3. Pasos de debugging: revisar cola de procesamiento, verificar cortes de red\nSé analítico y estructurado."
-            },
-            {
-              "id": "blocked-card",
-              "label": "Tarjeta bloqueada",
-              "classification": "BLOCKED_CARD",
-              "keywords": [
-                "bloqueada",
-                "blocked",
-                "rechazada",
-                "no funciona",
-                "desactivada",
-                "suspendida"
-              ],
-              "requiredFields": [
-                "card_last4",
-                "customer_id"
-              ],
-              "grafanaDashboard": "/d/cards",
-              "kibanaDashboard": "/app/discover#/?_a=(query:(match_phrase:(type:card)))",
-              "promptTemplate": "Eres un agente de seguridad de tarjetas. Analiza el ticket:\n1. Clasificación: ¿bloqueo por fraude? ¿Vencimiento? ¿Límite alcanzado?\n2. Datos críticos: card_last4, customer_id, fecha de vencimiento\n3. Acciones: desbloquear si es falsa alarma, emitir nueva tarjeta, investigar fraude\nPrioritiza seguridad del cliente."
-            }
-          ],
-          "description": "(Legacy) Array de clasificadores con prompts y campos requeridos. Solo se usa cuando promptsDirectory está vacío. Consulta README.md > Flujos de Clasificación",
-          "items": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "label": {
-                "type": "string"
-              },
-              "classification": {
-                "type": "string"
-              },
-              "keywords": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "requiredFields": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "grafanaDashboard": {
-                "type": "string"
-              },
-              "kibanaDashboard": {
-                "type": "string"
-              },
-              "promptTemplate": {
-                "type": "string"
-              }
-            }
-          }
+          "description": "Umbral de score para selección de prompts Markdown por LLM (0.0 - 1.0). Se multiplica por 100 (ej: 0.7 = 70/100)."
         },
         "jiraClassifier.promptsDirectory": {
           "type": "string",
           "default": "",
-          "description": "(Nuevo) Ruta al directorio con archivos .md de diagnóstico. Habilita modo Markdown + LLM Scoring (paralelo). Si se configura, reemplaza classifierPrompts. Consulta README.md > Flujos de Clasificación para el formato de archivos. Ejemplo: /Users/me/jira-prompts"
+          "description": "Ruta al directorio con archivos .md de diagnóstico. Habilita modo Markdown + LLM Scoring (paralelo). Ejemplo: /Users/me/jira-prompts"
         },
         "jiraClassifier.promptsDocumentation": {
           "type": "string",

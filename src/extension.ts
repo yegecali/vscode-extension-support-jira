@@ -52,7 +52,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
 
     jiraService = new JiraService(config, apiToken, logger);
-    const llmService = new LlmService();
+    const llmService = new LlmService(logger);
     const classifier = new ClassifierEngine();
     const urlBuilder = new UrlBuilder();
     const commentBuilder = new CommentBuilder();

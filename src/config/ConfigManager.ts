@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { ExtensionConfig, ClassifierPrompt } from '../types';
+import { ExtensionConfig } from '../types';
 
 export class ConfigManager {
   private static instance: ConfigManager;
@@ -21,19 +21,13 @@ export class ConfigManager {
       jiraEmail: config.get('jiraEmail') || '',
       jiraProject: config.get('jiraProject') || '',
       jiraJql: config.get('jiraJql') || 'project = BANK AND status != Closed',
-      grafanaBaseUrl: config.get('grafanaBaseUrl') || '',
-      kibanaBaseUrl: config.get('kibanaBaseUrl') || '',
+      grafanaUrlTemplate: config.get('grafanaUrlTemplate') || '',
+      kibanaUrlTemplate: config.get('kibanaUrlTemplate') || '',
       pollingIntervalMinutes: config.get('pollingIntervalMinutes') || 10,
       scoreThreshold: config.get('scoreThreshold') || 0.5,
-      classifierPrompts: config.get('classifierPrompts') || [],
       promptsDirectory: config.get('promptsDirectory') || '',
       promptsDocumentation: config.get('promptsDocumentation') || '',
     };
-  }
-
-  getPrompts(): ClassifierPrompt[] {
-    const config = vscode.workspace.getConfiguration('jiraClassifier');
-    return config.get('classifierPrompts') || [];
   }
 
   validate(): void {

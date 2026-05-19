@@ -1,118 +1,83 @@
-import { JiraTicket, ClassifierPrompt, MarkdownFrontmatter } from '../types';
+import { JiraTicket } from '../types';
 
 export class UrlBuilder {
+  private static readonly REQUEST_ID_PLACEHOLDERS = [
+    '{request-id-changed}',
+    '{request-id-changes}',
+  ];
+
   buildGrafanaUrl(
     ticket: JiraTicket,
-    prompt: ClassifierPrompt,
-    grafanaBaseUrl: string
+    grafanaUrlTemplate: string,
+    extractedRequestId?: string | null
   ): string {
-    if (!grafanaBaseUrl) {
-      return '';
-    }
-
-    const baseUrl = new URL(prompt.grafanaDashboard, grafanaBaseUrl).toString();
-    const url = new URL(baseUrl);
-
-    const requestId = this.extractRequestId(ticket.description);
-    if (requestId) {
-      url.searchParams.set('var-requestId', requestId);
-    }
-
-    url.searchParams.set('var-ticketKey', ticket.key);
-    url.searchParams.set('from', 'now-1h');
-
-    return url.toString();
+    return this.buildUrlFromTemplate(ticket, grafanaUrlTemplate, extractedRequestId);
   }
 
   buildKibanaUrl(
     ticket: JiraTicket,
-    prompt: ClassifierPrompt,
-    kibanaBaseUrl: string
+    kibanaUrlTemplate: string,
+    extractedRequestId?: string | null
   ): string {
-    if (!kibanaBaseUrl) {
-      return '';
-    }
-
-    const baseUrl = new URL(prompt.kibanaDashboard, kibanaBaseUrl).toString();
-    const url = new URL(baseUrl);
-
-    const aQuery = {
-      query: {
-        match_phrase: {
-          ticket: ticket.key,
-        },
-      },
-    };
-
-    url.searchParams.set('_a', JSON.stringify(aQuery));
-
-    return url.toString();
+    return this.buildUrlFromTemplate(ticket, kibanaUrlTemplate, extractedRequestId);
   }
 
-  buildGrafanaUrlFromMarkdown(
+  private buildUrlFromTemplate(
     ticket: JiraTicket,
-    frontmatter: MarkdownFrontmatter,
-    grafanaBaseUrl: string
+    urlTemplate: string,
+    extractedRequestId?: string | null
   ): string {
-    if (!grafanaBaseUrl) {
+    if (!urlTemplate.trim()) {
       return '';
     }
 
-    const baseUrl = new URL(frontmatter.grafanaDashboard, grafanaBaseUrl).toString();
-    const url = new URL(baseUrl);
-
-    const requestId = this.extractRequestId(ticket.description);
-    if (requestId) {
-      url.searchParams.set('var-requestId', requestId);
-    }
-
-    url.searchParams.set('var-ticketKey', ticket.key);
-    url.searchParams.set('from', 'now-1h');
-
-    return url.toString();
-  }
-
-  buildKibanaUrlFromMarkdown(
-    ticket: JiraTicket,
-    frontmatter: MarkdownFrontmatter,
-    kibanaBaseUrl: string
-  ): string {
-    if (!kibanaBaseUrl) {
+    const requestId = extractedRequestId || this.extractRequestId(ticket.description);
+    if (!requestId && this.hasRequestIdPlaceholder(urlTemplate)) {
       return '';
     }
 
-    const baseUrl = new URL(frontmatter.kibanaDashboard, kibanaBaseUrl).toString();
-    const url = new URL(baseUrl);
-
-    const aQuery = {
-      query: {
-        match_phrase: {
-          ticket: ticket.key,
-        },
-      },
-    };
-
-    url.searchParams.set('_a', JSON.stringify(aQuery));
-
-    return url.toString();
+    return this.replaceRequestIdPlaceholders(urlTemplate, requestId);
   }
 
-  private descriptionToString(description: any): string {
+  private hasRequestIdPlaceholder(value: string): boolean {
+    return UrlBuilder.REQUEST_ID_PLACEHOLDERS.some(placeholder => value.includes(placeholder));
+  }
+
+  private replaceRequestIdPlaceholders(value: string, requestId: string | null): string {
+    if (!requestId) {
+      return value;
+    }
+
+    return UrlBuilder.REQUEST_ID_PLACEHOLDERS.reduce(
+      (formattedValue, placeholder) => formattedValue.split(placeholder).join(requestId),
+      value
+    );
+  }
+
+  private descriptionToString(description: unknown): string {
     if (!description) return '';
     if (typeof description === 'string') return description;
-    if (typeof description === 'object' && description.content && Array.isArray(description.content)) {
-      return description.content.map((item: any) => this.extractTextFromAdf(item)).join(' ');
+    if (typeof description === 'object') {
+      const adfDescription = description as { content?: unknown[] };
+      if (adfDescription.content && Array.isArray(adfDescription.content)) {
+        return adfDescription.content
+          .map((item: unknown) => this.extractTextFromAdf(item))
+          .join(' ');
+      }
     }
     return '';
   }
 
-  private extractTextFromAdf(node: any): string {
+  private extractTextFromAdf(node: unknown): string {
     if (typeof node === 'string') return node;
     if (!node || typeof node !== 'object') return '';
-    if (node.type === 'text') return node.text || '';
-    if (node.content && Array.isArray(node.content)) {
-      return node.content.map((item: any) => this.extractTextFromAdf(item)).join(' ');
+
+    const adfNode = node as { type?: string; text?: string; content?: unknown[] };
+    if (adfNode.type === 'text') return adfNode.text || '';
+    if (adfNode.content && Array.isArray(adfNode.content)) {
+      return adfNode.content.map((item: unknown) => this.extractTextFromAdf(item)).join(' ');
     }
+
     return '';
   }
 
@@ -123,7 +88,7 @@ export class UrlBuilder {
     }
 
     const requestIdMatch = descriptionStr.match(
-      /request[_-]?id[:\s=]+([a-zA-Z0-9\-_]+)/i
+      /request[_-]?id\s*[:=]\s*([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})/i
     );
     if (requestIdMatch) {
       return requestIdMatch[1];

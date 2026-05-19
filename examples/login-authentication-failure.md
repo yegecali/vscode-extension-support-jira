@@ -2,8 +2,6 @@
 id: auth-login-failure
 label: Fallo de Autenticación / Login
 classification: AUTHENTICATION_ERROR
-grafanaDashboard: /d/auth-metrics/?var-service=auth-api
-kibanaDashboard: /app/discover#/?_a=(query:(match_phrase:(service:auth-api)))
 ---
 
 ## Diagnóstico de Fallo de Autenticación

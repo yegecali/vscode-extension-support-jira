@@ -1,49 +1,8 @@
 import * as vscode from 'vscode';
-import { JiraTicket, ClassifierPrompt, LlmAnalysis, MarkdownPrompt, LlmScore } from '../types';
+import { JiraTicket, LlmAnalysis, MarkdownPrompt, LlmScore } from '../types';
 
 export class LlmService {
-  async analyzeTicket(
-    ticket: JiraTicket,
-    prompt: ClassifierPrompt
-  ): Promise<LlmAnalysis> {
-    try {
-      const model = await this.selectModel();
-      if (!model) {
-        return this.defaultAnalysis('UNCLASSIFIED');
-      }
-
-      const userMessage = this.buildUserMessage(ticket);
-
-      const response = await Promise.race([
-        model.sendRequest(
-          [
-            vscode.LanguageModelChatMessage.Assistant(prompt.promptTemplate),
-            vscode.LanguageModelChatMessage.User(userMessage),
-          ],
-          {},
-          new vscode.CancellationTokenSource().token
-        ),
-        this.timeout(30000),
-      ]);
-
-      if (!response) {
-        return this.defaultAnalysis('UNCLASSIFIED');
-      }
-
-      let text = '';
-      for await (const chunk of response.text) {
-        text += chunk;
-      }
-
-      return this.parseAnalysis(text, prompt.classification);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      vscode.window.showWarningMessage(
-        `Error en análisis LLM: ${message}`
-      );
-      return this.defaultAnalysis('UNCLASSIFIED');
-    }
-  }
+  constructor(private logger?: (message: string) => void) {}
 
   async analyzeTicketGeneric(ticket: JiraTicket): Promise<LlmAnalysis> {
     try {
@@ -59,25 +18,15 @@ export class LlmService {
 
       const userMessage = this.buildUserMessage(ticket);
 
-      const response = await Promise.race([
-        model.sendRequest(
-          [
-            vscode.LanguageModelChatMessage.Assistant(systemPrompt),
-            vscode.LanguageModelChatMessage.User(userMessage),
-          ],
-          {},
-          new vscode.CancellationTokenSource().token
-        ),
-        this.timeout(30000),
-      ]);
+      const text = await this.sendLoggedRequest(
+        model,
+        'analyzeTicketGeneric',
+        systemPrompt,
+        userMessage
+      );
 
-      if (!response) {
+      if (!text) {
         return this.defaultAnalysis('UNCLASSIFIED');
-      }
-
-      let text = '';
-      for await (const chunk of response.text) {
-        text += chunk;
       }
 
       return this.parseAnalysis(text, 'UNCLASSIFIED');
@@ -111,29 +60,21 @@ export class LlmService {
         `Descripción: ${ticket.description || 'No proporcionada'}\n\n` +
         `Descripción del problema:\n${markdownPrompt.body}`;
 
-      if (documentation) {
+      this.logDocumentationCheck('scoreTicketAgainstPrompt', documentation);
+
+      if (documentation?.trim()) {
         userMessage += `\n\nContexto del proyecto:\n${documentation}`;
       }
 
-      const response = await Promise.race([
-        model.sendRequest(
-          [
-            vscode.LanguageModelChatMessage.Assistant(systemPrompt),
-            vscode.LanguageModelChatMessage.User(userMessage),
-          ],
-          {},
-          new vscode.CancellationTokenSource().token
-        ),
-        this.timeout(30000),
-      ]);
+      const text = await this.sendLoggedRequest(
+        model,
+        'scoreTicketAgainstPrompt',
+        systemPrompt,
+        userMessage
+      );
 
-      if (!response) {
+      if (!text) {
         return { score: 0, reason: 'No response from model' };
-      }
-
-      let text = '';
-      for await (const chunk of response.text) {
-        text += chunk;
       }
 
       return this.parseScore(text);
@@ -154,31 +95,23 @@ export class LlmService {
       }
 
       let systemPrompt = markdownPrompt.body;
-      if (documentation) {
+      this.logDocumentationCheck('analyzeTicketWithMarkdown', documentation);
+
+      if (documentation?.trim()) {
         systemPrompt += `\n\nContexto adicional del proyecto:\n${documentation}`;
       }
 
       const userMessage = this.buildUserMessage(ticket);
 
-      const response = await Promise.race([
-        model.sendRequest(
-          [
-            vscode.LanguageModelChatMessage.Assistant(systemPrompt),
-            vscode.LanguageModelChatMessage.User(userMessage),
-          ],
-          {},
-          new vscode.CancellationTokenSource().token
-        ),
-        this.timeout(30000),
-      ]);
+      const text = await this.sendLoggedRequest(
+        model,
+        'analyzeTicketWithMarkdown',
+        systemPrompt,
+        userMessage
+      );
 
-      if (!response) {
+      if (!text) {
         return this.defaultAnalysis(markdownPrompt.frontmatter.classification);
-      }
-
-      let text = '';
-      for await (const chunk of response.text) {
-        text += chunk;
       }
 
       return this.parseAnalysis(text, markdownPrompt.frontmatter.classification);
@@ -188,6 +121,54 @@ export class LlmService {
         `Error en análisis LLM con markdown: ${message}`
       );
       return this.defaultAnalysis(markdownPrompt.frontmatter.classification);
+    }
+  }
+
+  async extractRequestId(ticket: JiraTicket): Promise<string | null> {
+    try {
+      const model = await this.selectModel();
+      if (!model) {
+        this.logger?.('[REQUEST-ID] No hay modelo LLM disponible para extraer request id');
+        return null;
+      }
+
+      const systemPrompt =
+        'Extrae de un ticket el valor que represente el request id. ' +
+        'El usuario puede escribir el nombre del campo de muchas formas: request-id, request_id, Request_Id, requestid, request id, id de request, id request o similares. ' +
+        'Devuelve el valor solo si parece un identificador real asociado a ese campo. ' +
+        'Responde SOLO con JSON válido: {"requestId": "valor o null", "reason": "explicación breve"}.';
+
+      const userMessage =
+        `Ticket: ${ticket.key}\n` +
+        `Título: ${ticket.summary}\n` +
+        `Descripción:\n${this.descriptionToString(ticket.description) || 'No proporcionada'}`;
+
+      this.logRequestIdExtractionStep(ticket.key, 'Descripción normalizada', this.descriptionToString(ticket.description) || 'No proporcionada');
+
+      const text = await this.sendLoggedRequest(
+        model,
+        'extractRequestId',
+        systemPrompt,
+        userMessage
+      );
+
+      if (!text) {
+        this.logRequestIdExtractionStep(ticket.key, 'Resultado parseado', 'null (sin respuesta del LLM)');
+        return null;
+      }
+
+      const requestId = this.parseExtractedRequestId(text);
+      this.logRequestIdExtractionStep(
+        ticket.key,
+        'Resultado parseado',
+        requestId || 'null (el LLM no identificó un request id usable)'
+      );
+
+      return requestId;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger?.(`[LLM REQUEST][extractRequestId] Error extrayendo request id: ${message}`);
+      return null;
     }
   }
 
@@ -238,6 +219,114 @@ export class LlmService {
     );
   }
 
+  private descriptionToString(description: string | object | null): string {
+    if (!description) return '';
+    if (typeof description === 'string') return description;
+    const adfDescription = description as { content?: unknown[] };
+    if (adfDescription.content && Array.isArray(adfDescription.content)) {
+      return adfDescription.content.map((item: unknown) => this.extractTextFromAdf(item)).join(' ');
+    }
+    return '';
+  }
+
+  private extractTextFromAdf(node: unknown): string {
+    if (typeof node === 'string') return node;
+    if (!node || typeof node !== 'object') return '';
+
+    const adfNode = node as { type?: string; text?: string; content?: unknown[] };
+    if (adfNode.type === 'text') return adfNode.text || '';
+    if (adfNode.content && Array.isArray(adfNode.content)) {
+      return adfNode.content.map((item: unknown) => this.extractTextFromAdf(item)).join(' ');
+    }
+
+    return '';
+  }
+
+  private async sendLoggedRequest(
+    model: vscode.LanguageModelChat,
+    operation: string,
+    systemPrompt: string,
+    userMessage: string
+  ): Promise<string | null> {
+    const messages = [
+      vscode.LanguageModelChatMessage.Assistant(systemPrompt),
+      vscode.LanguageModelChatMessage.User(userMessage),
+    ];
+
+    this.logLlmMessage(operation, 'REQUEST', [
+      `Model: ${model.name} (${model.id})`,
+      `[Assistant prompt]\n${systemPrompt}`,
+      `[User message]\n${userMessage}`,
+    ].join('\n\n'));
+
+    const response = await Promise.race([
+      model.sendRequest(
+        messages,
+        {},
+        new vscode.CancellationTokenSource().token
+      ),
+      this.timeout(30000),
+    ]);
+
+    if (!response) {
+      this.logLlmMessage(operation, 'RESPONSE', 'No response from model (timeout).');
+      return null;
+    }
+
+    let text = '';
+    for await (const chunk of response.text) {
+      text += chunk;
+    }
+
+    this.logLlmMessage(operation, 'RESPONSE', text || '(empty response)');
+    return text;
+  }
+
+  private logLlmMessage(operation: string, direction: 'REQUEST' | 'RESPONSE', content: string): void {
+    const message = [
+      `[LLM ${direction}][${operation}]`,
+      '----------------------------------------',
+      content,
+      '----------------------------------------',
+    ].join('\n');
+
+    console.log(`\n[Jira Classifier]${message}`);
+    this.logger?.(message);
+  }
+
+  private logDocumentationCheck(operation: string, documentation?: string): void {
+    const rawLength = documentation?.length ?? 0;
+    const trimmedLength = documentation?.trim().length ?? 0;
+    const willSend = trimmedLength > 0;
+    const preview = willSend
+      ? this.previewText(documentation ?? '')
+      : '(no se adjunta documentación: undefined, vacío o solo espacios)';
+
+    this.logLlmMessage(operation, 'REQUEST', [
+      '[Documentation check]',
+      `rawLength: ${rawLength}`,
+      `trimmedLength: ${trimmedLength}`,
+      `willSendContext: ${willSend}`,
+      `[Documentation preview]\n${preview}`,
+    ].join('\n'));
+  }
+
+  private logRequestIdExtractionStep(ticketKey: string, step: string, content: string): void {
+    const message = [
+      `[REQUEST-ID][${ticketKey}] ${step}`,
+      this.previewText(content),
+    ].join('\n');
+
+    console.log(`\n[Jira Classifier]${message}`);
+    this.logger?.(message);
+  }
+
+  private previewText(text: string, maxLength = 1000): string {
+    return text.length > maxLength
+      ? `${text.slice(0, maxLength)}... [truncado]`
+      : text;
+  }
+
   private parseScore(text: string): LlmScore {
     try {
       const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -284,6 +373,29 @@ export class LlmService {
       };
     } catch {
       return this.defaultAnalysis(fallbackClassification);
+    }
+  }
+
+  private parseExtractedRequestId(text: string): string | null {
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        return null;
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (typeof parsed.requestId !== 'string') {
+        return null;
+      }
+
+      const requestId = parsed.requestId.trim();
+      if (!requestId || requestId.toLowerCase() === 'null') {
+        return null;
+      }
+
+      return requestId;
+    } catch {
+      return null;
     }
   }
 

@@ -40,13 +40,14 @@ export class CommentBuilder {
 
     return (
       '🤖 [Jira Classifier] Análisis automático\n' +
-      `⚠️ Clasificación: ${result.matchedPrompt?.label || result.matchedMarkdownPrompt?.frontmatter.label || analysis.classification} — Datos incompletos\n\n` +
+      `⚠️ Clasificación: ${result.matchedMarkdownPrompt?.frontmatter.label || analysis.classification} — Datos incompletos\n\n` +
       '📋 Campos faltantes:\n' +
       `${missingFieldsList}\n\n` +
       `💬 Resumen: ${analysis.summary}\n\n` +
       '📊 Próximos pasos:\n' +
       '- Proporciona los campos faltantes\n' +
       '- Re-actualiza el ticket para que se ejecute el análisis nuevamente\n\n' +
+      this.buildMonitoringSection(result) +
       '_Confianza del análisis: ' +
       `${Math.round(analysis.confidence * 100)}%_`
     );
@@ -58,24 +59,14 @@ export class CommentBuilder {
       .map((step, i) => `  ${i + 1}. ${step}`)
       .join('\n');
 
-    let dashboardsText = '';
-    if (result.grafanaUrl) {
-      dashboardsText += `📊 [Grafana](${result.grafanaUrl})\n`;
-    }
-    if (result.kibanaUrl) {
-      dashboardsText += `🔍 [Kibana](${result.kibanaUrl})\n`;
-    }
-
     return (
       '🤖 [Jira Classifier] Análisis automático\n' +
-      `✅ Clasificación: **${result.matchedPrompt?.label || result.matchedMarkdownPrompt?.frontmatter.label || analysis.classification}**\n` +
+      `✅ Clasificación: **${result.matchedMarkdownPrompt?.frontmatter.label || analysis.classification}**\n` +
       `Confianza: ${Math.round(analysis.confidence * 100)}%\n\n` +
       `💬 ${analysis.summary}\n\n` +
       '📋 Próximos pasos:\n' +
       `${nextStepsText}\n\n` +
-      (dashboardsText
-        ? '🔗 Dashboards de monitoreo:\n' + dashboardsText + '\n'
-        : '') +
+      this.buildMonitoringSection(result) +
       `_Actualizado: ${new Date().toISOString()}_`
     );
   }
@@ -94,7 +85,29 @@ export class CommentBuilder {
       '⚠️ No se pudo clasificar automáticamente\n\n' +
       'El sistema no pudo determinar la categoría de este ticket.\n' +
       'Por favor, revísalo manualmente y proporciona más contexto si es necesario.\n\n' +
+      this.buildMonitoringSection(result) +
       `_Ticket: ${result.ticket.key}_`
+    );
+  }
+
+  private buildMonitoringSection(result: TicketResult): string {
+    const urls: string[] = [];
+
+    if (result.grafanaUrl) {
+      urls.push(`Grafana: [Abrir Grafana](<${result.grafanaUrl}>)`);
+    }
+    if (result.kibanaUrl) {
+      urls.push(`Kibana: [Abrir Kibana](<${result.kibanaUrl}>)`);
+    }
+
+    if (urls.length === 0) {
+      return '';
+    }
+
+    return (
+      '🔗 Especialista, revisa las siguientes URLs de monitoreo:\n' +
+      urls.join('\n') +
+      '\n\n'
     );
   }
 }

@@ -25,9 +25,7 @@ export class PromptLoader {
           if (
             frontmatter.id &&
             frontmatter.label &&
-            frontmatter.classification &&
-            frontmatter.grafanaDashboard &&
-            frontmatter.kibanaDashboard
+            frontmatter.classification
           ) {
             prompts.push({
               frontmatter,
@@ -58,8 +56,6 @@ export class PromptLoader {
           id: '',
           label: '',
           classification: '',
-          grafanaDashboard: '',
-          kibanaDashboard: '',
         },
         body: content,
       };
@@ -79,8 +75,6 @@ export class PromptLoader {
       id: '',
       label: '',
       classification: '',
-      grafanaDashboard: '',
-      kibanaDashboard: '',
     };
 
     const lines = yaml.split('\n');
@@ -96,10 +90,6 @@ export class PromptLoader {
           result.label = trimmedValue;
         } else if (key === 'classification') {
           result.classification = trimmedValue;
-        } else if (key === 'grafanaDashboard') {
-          result.grafanaDashboard = trimmedValue;
-        } else if (key === 'kibanaDashboard') {
-          result.kibanaDashboard = trimmedValue;
         }
       }
     }

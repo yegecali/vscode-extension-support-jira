@@ -1,4 +1,4 @@
-import { JiraTicket, ClassifierPrompt, MarkdownPrompt } from '../types';
+import { JiraTicket, MarkdownPrompt } from '../types';
 import { LlmService } from '../services/LlmService';
 
 export class ClassifierEngine {
@@ -24,50 +24,6 @@ export class ClassifierEngine {
       return node.content.map((item: any) => this.extractTextFromAdf(item)).join(' ');
     }
     return '';
-  }
-
-  normalizeText(text: string): string {
-    return text
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
-      .trim();
-  }
-
-  calculateScore(normalizedText: string, prompt: ClassifierPrompt): number {
-    if (prompt.keywords.length === 0) {
-      return 0;
-    }
-
-    const matchedKeywords = prompt.keywords.filter(keyword =>
-      normalizedText.includes(keyword.toLowerCase())
-    );
-
-    return matchedKeywords.length / prompt.keywords.length;
-  }
-
-  findBestMatch(
-    ticket: JiraTicket,
-    prompts: ClassifierPrompt[],
-    threshold: number
-  ): { prompt: ClassifierPrompt | null; score: number } {
-    const description = this.descriptionToString(ticket.description);
-    const ticketText = this.normalizeText(
-      `${ticket.summary} ${description}`
-    );
-
-    let bestPrompt: ClassifierPrompt | null = null;
-    let bestScore = 0;
-
-    for (const prompt of prompts) {
-      const score = this.calculateScore(ticketText, prompt);
-      if (score > bestScore) {
-        bestScore = score;
-        bestPrompt = score >= threshold ? prompt : null;
-      }
-    }
-
-    return { prompt: bestPrompt, score: bestScore };
   }
 
   async findBestMatchLlm(

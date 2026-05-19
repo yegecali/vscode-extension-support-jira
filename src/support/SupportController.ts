@@ -82,12 +82,20 @@ export class SupportController {
       if (this.config.promptsDocumentation.trim()) {
         try {
           const docPath = this.config.promptsDocumentation;
+          this.log(`[CYCLE] Cargando documentación del proyecto desde: ${docPath}`);
           this.projectDocumentation = fs.readFileSync(docPath, 'utf-8');
-          this.log(`[CYCLE] Documentación del proyecto cargada (${this.projectDocumentation.length} caracteres)`);
+          this.log(
+            `[CYCLE] Documentación del proyecto cargada ` +
+            `(${this.projectDocumentation.length} caracteres, ` +
+            `${this.projectDocumentation.trim().length} caracteres sin espacios extremos)`
+          );
+          this.log(`[CYCLE] Vista previa documentación:\n${this.previewText(this.projectDocumentation)}`);
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           this.log(`[CYCLE] Advertencia: No se pudo cargar documentación del proyecto: ${message}`);
         }
+      } else {
+        this.log('[CYCLE] promptsDocumentation no configurado; no se enviará contexto de proyecto al LLM');
       }
 
       const startTime = Date.now();
@@ -147,7 +155,6 @@ export class SupportController {
 
     const result: TicketResult = {
       ticket,
-      matchedPrompt: null,
       matchedMarkdownPrompt: null,
       analysis: null,
       grafanaUrl: null,
@@ -172,9 +179,15 @@ export class SupportController {
       return result;
     }
 
-    const useMarkdownMode = this.markdownPrompts.length > 0;
+    const monitoringRequestId = await this.extractRequestIdForMonitoring(ticket);
+    this.addMonitoringUrls(ticket, result, monitoringRequestId);
 
-    if (useMarkdownMode) {
+    if (this.markdownPrompts.length === 0) {
+      this.log(`[TICKET] No hay prompts Markdown cargados, usando análisis genérico para ${ticket.key}`);
+      const genericAnalysis = await this.llmService.analyzeTicketGeneric(ticket);
+      result.analysis = genericAnalysis;
+      result.conclusion = 'UNCLASSIFIED';
+    } else {
       this.log(`[TICKET] Buscando coincidencia de clasificador Markdown para ${ticket.key}`);
       const threshold = this.config.scoreThreshold * 100;
       const { prompt: markdownPrompt, score } = await this.classifier.findBestMatchLlm(
@@ -205,69 +218,9 @@ export class SupportController {
         } else {
           this.log(`[TICKET] ${ticket.key} tiene todos los campos requeridos`);
           result.conclusion = 'COMPLETE';
-          result.grafanaUrl = this.urlBuilder.buildGrafanaUrlFromMarkdown(
-            ticket,
-            markdownPrompt.frontmatter,
-            this.config.grafanaBaseUrl
-          );
-          result.kibanaUrl = this.urlBuilder.buildKibanaUrlFromMarkdown(
-            ticket,
-            markdownPrompt.frontmatter,
-            this.config.kibanaBaseUrl
-          );
         }
       } else {
         this.log(`[TICKET] ${ticket.key} no tiene coincidencia Markdown, usando análisis genérico`);
-        const genericAnalysis =
-          await this.llmService.analyzeTicketGeneric(ticket);
-        result.analysis = genericAnalysis;
-        result.conclusion = 'UNCLASSIFIED';
-      }
-    } else {
-      this.log(`[TICKET] Buscando coincidencia de clasificador para ${ticket.key}`);
-      const { prompt: matchedPrompt } = this.classifier.findBestMatch(
-        ticket,
-        this.config.classifierPrompts,
-        this.config.scoreThreshold
-      );
-
-      result.matchedPrompt = matchedPrompt;
-
-      if (matchedPrompt) {
-        this.log(`[TICKET] ${ticket.key} coincide con: ${matchedPrompt.classification}`);
-        this.log(`[TICKET] Analizando ${ticket.key} con LLM`);
-        const analysis = await this.llmService.analyzeTicket(
-          ticket,
-          matchedPrompt
-        );
-        result.analysis = analysis;
-        this.log(`[TICKET] Análisis LLM completado para ${ticket.key} - Confianza: ${analysis.confidence}`);
-
-        const missingFields = this.checkMissingFields(
-          ticket,
-          matchedPrompt.requiredFields
-        );
-
-        if (missingFields.length > 0) {
-          this.log(`[TICKET] ${ticket.key} falta campos: ${missingFields.join(', ')}`);
-          result.analysis.missingFields = missingFields;
-          result.conclusion = 'MISSING_DATA';
-        } else {
-          this.log(`[TICKET] ${ticket.key} tiene todos los campos requeridos`);
-          result.conclusion = 'COMPLETE';
-          result.grafanaUrl = this.urlBuilder.buildGrafanaUrl(
-            ticket,
-            matchedPrompt,
-            this.config.grafanaBaseUrl
-          );
-          result.kibanaUrl = this.urlBuilder.buildKibanaUrl(
-            ticket,
-            matchedPrompt,
-            this.config.kibanaBaseUrl
-          );
-        }
-      } else {
-        this.log(`[TICKET] ${ticket.key} no tiene coincidencia, usando análisis genérico`);
         const genericAnalysis =
           await this.llmService.analyzeTicketGeneric(ticket);
         result.analysis = genericAnalysis;
@@ -310,12 +263,59 @@ export class SupportController {
     try {
       this.log(`[COMMENT] Generando comentario para ${ticket.key}`);
       const comment = this.commentBuilder.buildComment(result);
+      this.log(`[COMMENT] Contenido generado para ${ticket.key}:\n${this.previewText(comment, 3000)}`);
       this.log(`[COMMENT] Enviando comentario a ${ticket.key} (${comment.length} caracteres)`);
       await this.jiraService.postComment(ticket.key, comment);
       this.log(`[COMMENT] ✓ Comentario enviado exitosamente a ${ticket.key}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       this.log(`[WARN] ✗ No se pudo comentar ${ticket.key}: ${message}`);
+    }
+  }
+
+  private async extractRequestIdForMonitoring(ticket: JiraTicket): Promise<string | null> {
+    this.log(`[REQUEST-ID] Iniciando búsqueda con LLM para ${ticket.key}`);
+    this.log(`[REQUEST-ID] Descripción enviada a extractor (${ticket.key}):\n${this.previewText(this.descriptionToString(ticket.description))}`);
+    const requestId = await this.llmService.extractRequestId(ticket);
+
+    if (requestId) {
+      this.log(`[REQUEST-ID] Valor detectado para ${ticket.key}: ${requestId}`);
+    } else {
+      this.log(`[REQUEST-ID] No se detectó request id para ${ticket.key}`);
+    }
+
+    return requestId;
+  }
+
+  private addMonitoringUrls(
+    ticket: JiraTicket,
+    result: TicketResult,
+    requestId: string | null
+  ): void {
+    this.log(`[MONITORING] Template Grafana configurado: ${this.config.grafanaUrlTemplate ? 'sí' : 'no'}`);
+    this.log(`[MONITORING] Template Kibana configurado: ${this.config.kibanaUrlTemplate ? 'sí' : 'no'}`);
+
+    result.grafanaUrl = this.urlBuilder.buildGrafanaUrl(
+      ticket,
+      this.config.grafanaUrlTemplate,
+      requestId
+    );
+    result.kibanaUrl = this.urlBuilder.buildKibanaUrl(
+      ticket,
+      this.config.kibanaUrlTemplate,
+      requestId
+    );
+
+    if (result.grafanaUrl) {
+      this.log(`[MONITORING] URL Grafana generada para ${ticket.key}:\n${result.grafanaUrl}`);
+    } else {
+      this.log(`[MONITORING] No se generó URL Grafana para ${ticket.key}. Revisa template y request id.`);
+    }
+
+    if (result.kibanaUrl) {
+      this.log(`[MONITORING] URL Kibana generada para ${ticket.key}:\n${result.kibanaUrl}`);
+    } else {
+      this.log(`[MONITORING] No se generó URL Kibana para ${ticket.key}. Revisa template y request id.`);
     }
   }
 
@@ -346,31 +346,6 @@ export class SupportController {
       return node.content.map((item: any) => this.extractTextFromAdf(item)).join(' ');
     }
     return '';
-  }
-
-  private checkMissingFields(
-    ticket: JiraTicket,
-    requiredFields: string[]
-  ): string[] {
-    const missingFields: string[] = [];
-    const description = this.descriptionToString(ticket.description);
-    const ticketText = (
-      (ticket.summary || '') +
-      ' ' +
-      description
-    ).toLowerCase();
-
-    for (const field of requiredFields) {
-      const fieldLower = field.toLowerCase();
-      if (
-        !ticketText.includes(fieldLower) &&
-        !ticketText.includes(fieldLower.replace(/_/g, ' '))
-      ) {
-        missingFields.push(field);
-      }
-    }
-
-    return missingFields;
   }
 
   private cacheResults(results: TicketResult[]): void {
@@ -408,5 +383,17 @@ export class SupportController {
   private log(message: string): void {
     const timestamp = new Date().toISOString();
     this.outputChannel.appendLine(`[${timestamp}] ${message}`);
+  }
+
+  private previewText(text: string, maxLength = 1000): string {
+    if (!text.trim()) {
+      return '(documentación vacía o solo espacios)';
+    }
+
+    const preview = text.length > maxLength
+      ? `${text.slice(0, maxLength)}... [truncado]`
+      : text;
+
+    return preview;
   }
 }

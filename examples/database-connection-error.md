@@ -2,8 +2,6 @@
 id: db-connection-failure
 label: Error de Conexión a Base de Datos
 classification: DATABASE_ERROR
-grafanaDashboard: /d/postgres-metrics/?var-instance=prod
-kibanaDashboard: /app/discover#/?_a=(query:(match_phrase:(component:database)))
 ---
 
 ## Diagnóstico de Error de Conexión a Base de Datos

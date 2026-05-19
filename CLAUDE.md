@@ -4,23 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A VS Code extension that integrates with Jira to classify support tickets and generate monitoring links. The classifier uses an LLM (GitHub Copilot) to analyze ticket descriptions and matches them against diagnostic rules. Two classification modes are supported:
+A VS Code extension that integrates with Jira to classify support tickets and generate monitoring links. The classifier uses an LLM (GitHub Copilot) to analyze ticket descriptions and matches them against Markdown diagnostic rules.
 
-- **Legacy Mode**: Keyword-based matching against JSON prompt templates in VS Code settings
 - **Markdown + LLM Mode**: Parallel relevance scoring of Markdown diagnostic files, then full analysis with the highest-scoring file
 
 The extension runs as a background polling service, automatically fetching tickets via JQL, classifying them, and posting analysis + monitoring URLs back to Jira as comments.
 
 ## Key Architecture Concepts
 
-### Two Classification Modes
+### Classification Mode
 
-The `promptsDirectory` setting determines which mode is active:
-
-- **Empty `promptsDirectory` → Legacy Mode**: Uses `classifierPrompts` JSON array from settings. Keywords in ticket description are matched against classifier keywords; the classifier with most matches is selected.
-- **Configured `promptsDirectory` → Markdown Mode**: Loads all `.md` files from the directory. Each file is scored in parallel by the LLM based on relevance to the ticket. The highest-scoring file (if above threshold) provides context for the full analysis.
-
-See `CLASSIFICATION_MODES.md` for a visual comparison.
+The `promptsDirectory` setting points to `.md` diagnostic files. Each file is scored in parallel by the LLM based on relevance to the ticket. The highest-scoring file, if above threshold, provides context for the full analysis.
 
 ### Data Flow
 
@@ -35,7 +29,7 @@ JiraService (fetches tickets)
   ↓
 PromptLoader (loads classifiers/markdown files)
   ↓
-ClassifierEngine (selects best prompt via keyword match or LLM scoring)
+ClassifierEngine (selects best prompt via LLM scoring)
   ↓
 LlmService (calls GitHub Copilot via VS Code)
   ↓
@@ -55,8 +49,6 @@ Diagnostic files (`.md`) contain YAML frontmatter + Markdown body:
 id: auth-failure
 label: Authentication Failure
 classification: AUTHENTICATION_ERROR
-grafanaDashboard: /d/auth-dashboard
-kibanaDashboard: /app/discover#/?_a=(query:...)
 ---
 
 ## Diagnostic Content
@@ -158,11 +150,10 @@ All settings are in `package.json` under `contributes.configuration.properties`.
 | `jiraClassifier.jiraEmail` | string | Jira user email for API auth |
 | `jiraClassifier.jiraProject` | string | Jira project key (e.g., `BANK`) |
 | `jiraClassifier.jiraJql` | string | JQL query to fetch tickets |
-| `jiraClassifier.promptsDirectory` | string | Path to directory with `.md` diagnostic files (empty = Legacy mode) |
-| `jiraClassifier.classifierPrompts` | array | Legacy mode: JSON classifiers with keywords, prompts, required fields |
+| `jiraClassifier.promptsDirectory` | string | Path to directory with `.md` diagnostic files |
 | `jiraClassifier.scoreThreshold` | number | Min relevance score (0.0–1.0). In Markdown mode, multiplied by 100 for LLM scores |
-| `jiraClassifier.grafanaBaseUrl` | string | Grafana base URL for dashboard links |
-| `jiraClassifier.kibanaBaseUrl` | string | Kibana base URL for log links |
+| `jiraClassifier.grafanaUrlTemplate` | string | Full Grafana URL template. `{request-id-changed}` is replaced with the extracted request id |
+| `jiraClassifier.kibanaUrlTemplate` | string | Full Kibana URL template. `{request-id-changed}` is replaced with the extracted request id |
 | `jiraClassifier.pollingIntervalMinutes` | number | Polling frequency |
 | `jiraClassifier.promptsDocumentation` | string | Optional: Path to project documentation file to include in LLM context |
 

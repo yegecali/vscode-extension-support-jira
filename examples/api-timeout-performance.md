@@ -2,8 +2,6 @@
 id: api-timeout-performance
 label: Timeout / Rendimiento Lento de API
 classification: PERFORMANCE_ISSUE
-grafanaDashboard: /d/api-latency/?var-service=api-gateway
-kibanaDashboard: /app/discover#/?_a=(query:(match_phrase:(type:api_request)))
 ---
 
 ## Diagnóstico de Timeout / API Lenta
