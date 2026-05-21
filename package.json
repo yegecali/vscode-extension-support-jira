@@ -4,6 +4,7 @@
   "description": "Agente LLM que clasifica tickets Jira, valida datos y genera URLs de monitoreo",
   "version": "0.1.0",
   "publisher": "your-publisher",
+  "icon": "resources/icon.png",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -11,7 +12,9 @@
     "Other"
   ],
   "activationEvents": [
-    "onView:ticketPanel"
+    "onView:ticketPanel",
+    "onCommand:jiraClassifier.clear cache",
+    "onCommand:jiraclasifier.clear cache"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -36,22 +39,27 @@
     "commands": [
       {
         "command": "jiraClassifier.startSupport",
+        "category": "Jira Classifier",
         "title": "Iniciar Soporte"
       },
       {
         "command": "jiraClassifier.stopSupport",
+        "category": "Jira Classifier",
         "title": "Detener Soporte"
       },
       {
         "command": "jiraClassifier.refresh",
+        "category": "Jira Classifier",
         "title": "Refrescar tickets"
       },
       {
         "command": "jiraClassifier.openSettings",
+        "category": "Jira Classifier",
         "title": "Configurar prompts"
       },
       {
         "command": "jiraClassifier.clearCache",
+        "category": "Jira Classifier",
         "title": "Limpiar cache y reanalizar"
       }
     ],
@@ -165,7 +173,7 @@
     "test": "node ./out/test/runTest.js"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
+    "@types/node": "^20.19.41",
     "@types/vscode": "^1.90.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",

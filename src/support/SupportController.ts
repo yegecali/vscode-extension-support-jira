@@ -1,8 +1,10 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
+import * as path from 'path';
 import { JiraService } from '../services/JiraService';
 import { LlmService } from '../services/LlmService';
 import { NewmanService } from '../services/NewmanService';
+import { UnclassifiedTicketLogger } from '../services/UnclassifiedTicketLogger';
 import { ClassifierEngine } from '../core/ClassifierEngine';
 import { UrlBuilder } from '../core/UrlBuilder';
 import { CommentBuilder } from '../core/CommentBuilder';
@@ -17,6 +19,7 @@ export class SupportController {
   private isRunning = false;
   private markdownPrompts: MarkdownPrompt[] = [];
   private projectDocumentation: string = '';
+  private unclassifiedLogger: UnclassifiedTicketLogger;
 
   constructor(
     private context: vscode.ExtensionContext,
@@ -30,7 +33,11 @@ export class SupportController {
     private config: ExtensionConfig,
     private onResultsUpdated: (results: TicketResult[]) => void,
     private outputChannel: vscode.OutputChannel
-  ) {}
+  ) {
+    const logsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      || path.join(context.globalStorageUri.fsPath, 'logs');
+    this.unclassifiedLogger = new UnclassifiedTicketLogger(logsRoot);
+  }
 
   start(): void {
     if (this.isRunning) {
@@ -176,6 +183,7 @@ export class SupportController {
     if (this.classifier.isEmpty(ticket)) {
       this.log(`[TICKET] ${ticket.key} está vacío, marcando como EMPTY`);
       result.conclusion = 'EMPTY';
+      await this.logUnclassifiedIfNeeded(ticket, result, 'Ticket vacío (sin descripción ni resumen)');
       if (!alreadyCommented) {
         await this.postComment(ticket, result);
         this.markCommented(ticket.key, result);
@@ -191,6 +199,7 @@ export class SupportController {
       const genericAnalysis = await this.llmService.analyzeTicketGeneric(ticket);
       result.analysis = genericAnalysis;
       result.conclusion = 'UNCLASSIFIED';
+      await this.logUnclassifiedIfNeeded(ticket, result, 'No hay prompts Markdown configurados');
       await this.runNewmanIfIncident(ticket, result);
     } else {
       this.log(`[TICKET] Buscando coincidencia de clasificador Markdown para ${ticket.key}`);
@@ -231,6 +240,7 @@ export class SupportController {
           await this.llmService.analyzeTicketGeneric(ticket);
         result.analysis = genericAnalysis;
         result.conclusion = 'UNCLASSIFIED';
+        await this.logUnclassifiedIfNeeded(ticket, result, 'Ningún prompt Markdown coincidió con el ticket (score por debajo del umbral)');
         await this.runNewmanIfIncident(ticket, result);
       }
     }
@@ -401,6 +411,20 @@ export class SupportController {
       const message = error instanceof Error ? error.message : 'Unknown error';
       this.log(`[CACHE] ✗ Error al limpiar cache: ${message}`);
       vscode.window.showErrorMessage(`Error al limpiar cache: ${message}`);
+    }
+  }
+
+  private async logUnclassifiedIfNeeded(
+    ticket: JiraTicket,
+    result: TicketResult,
+    reason: string
+  ): Promise<void> {
+    try {
+      await this.unclassifiedLogger.logUnclassifiedTicket(ticket, result, reason);
+      this.log(`[UNCLASSIFIED] Ticket ${ticket.key} registrado en carpeta unclassified-tickets/`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.log(`[UNCLASSIFIED] ✗ No se pudo registrar ticket no clasificado ${ticket.key}: ${message}`);
     }
   }
 

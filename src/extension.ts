@@ -115,10 +115,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       ticketPanel = TicketPanel.createOrShow(supportController, jiraService);
     });
 
-    registerCommand('jiraClassifier.clearCache', async () => {
+    const clearCache = async (): Promise<void> => {
       await supportController.clearCache();
       updateStatusBar();
-    });
+    };
+
+    registerCommand('jiraClassifier.clearCache', clearCache);
+    registerCommand('jiraClassifier.clear cache', clearCache);
+    registerCommand('jiraclasifier.clear cache', clearCache);
 
     statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     statusBarItem.command = 'jiraClassifier.showPanel';
