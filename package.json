@@ -3,7 +3,7 @@
   "displayName": "Jira Ticket Classifier",
   "description": "Agente LLM que clasifica tickets Jira, valida datos y genera URLs de monitoreo",
   "version": "0.1.2",
-  "publisher": "your-publisher",
+  "publisher": "yemicanchari",
   "repository": {
     "type": "git",
     "url": "https://github.com/yegecali/vscode-extension-support-jira.git"
