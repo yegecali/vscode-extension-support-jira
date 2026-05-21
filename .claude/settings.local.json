@@ -9,7 +9,10 @@
       "Bash(curl -s https://api.github.com/repos/yegecali/bank-standards-extension/contents/.github/workflows)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(gh repo *)",
-      "Bash(python3 -m json.tool)"
+      "Bash(python3 -m json.tool)",
+      "Bash(npm test *)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'ci: Add GitHub Actions workflows and test infrastructure *)"
     ]
   }
 }
