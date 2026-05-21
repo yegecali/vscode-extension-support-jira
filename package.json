@@ -4,6 +4,10 @@
   "description": "Agente LLM que clasifica tickets Jira, valida datos y genera URLs de monitoreo",
   "version": "0.1.1",
   "publisher": "your-publisher",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yegecali/vscode-extension-support-jira.git"
+  },
   "icon": "resources/icon.png",
   "engines": {
     "vscode": "^1.90.0"
@@ -16,7 +20,7 @@
     "onCommand:jiraClassifier.clear cache",
     "onCommand:jiraclasifier.clear cache"
   ],
-  "main": "./out/extension.js",
+  "main": "./out/src/extension.js",
   "contributes": {
     "viewsContainers": {
       "activitybar": [
