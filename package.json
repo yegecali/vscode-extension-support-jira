@@ -2,7 +2,7 @@
   "name": "jira-ticket-classifier",
   "displayName": "Jira Ticket Classifier",
   "description": "Agente LLM que clasifica tickets Jira, valida datos y genera URLs de monitoreo",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "your-publisher",
   "repository": {
     "type": "git",
